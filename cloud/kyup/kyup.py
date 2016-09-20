@@ -17,10 +17,11 @@
 DOCUMENTATION = '''
 ---
 module: kyup
-short_description: create, terminate, start or stop a container in kyup.com, return container_id
+short_description: create, terminate, start or stop a container at kyup.com, return container_id.
 description:
     - Creates or terminates Kyup container. When created optionally waits for it to be 'running'. This module has a dependency on python-json and python-requests.
-version_added: "0.1"
+version_added: "2.2"
+author: Marian Marinov <mm@kyup.com>
 options:
   api_key:
     description:
@@ -95,8 +96,6 @@ options:
     choices: [ "local", "distributed" ]
     required: false
     default: local
-
-author: Marian Marinov <mm@kyup.com>
 '''
 
 EXAMPLES = '''
@@ -141,13 +140,12 @@ def encrypt( key, data ):
 ## End of encryption code
 
 def kyup_action(module, container_id, action):
-    api_key = module.params.get('api_key')
     req = '{"action":"%s","authorization_key":"%s","data":{"container_id":%d}}'
     count = 12; # 12 x 5sec = 60 seconds
     ret = {}
     while count != 0:
         # get the response
-        resp = requests.post(url, { 'request': req % (action, api_key, container_id) } )
+        resp = requests.post(url, { 'request': req % (action, module.params.get('api_key'), container_id) } )
         # parse the json
         ret = json.loads(resp.text)
         # check if the status is OK
@@ -161,12 +159,11 @@ def kyup_action(module, container_id, action):
     module.fail_json(changed=False, msg = "Unable to %s container %d Error code: %d Error msg: %s" % (action, container_id, ret["data"]["error_code"], ret["data"]["error"]))
 
 def get_task_status(module, task_id):
-    api_key = module.params.get('api_key')
     req = '{"action":"getTask","authorization_key":"%s","data":{"task_id":%d}}'
     count = 12; # 12 x 5sec = 60 seconds
     ret = {}
     while count != 0:
-        resp = requests.post(url, { 'request': req % (api_key, task_id) } )
+        resp = requests.post(url, { 'request': req % (module.params.get('api_key'), task_id) } )
         ret = json.loads(resp.text)
         # Check if the status is 1 and if we have received the data hash, then check if we have a task and its status is 1
         if ret["status"] and ret["data"]["task"]["status"] == 1:
@@ -176,7 +173,6 @@ def get_task_status(module, task_id):
     module.fail_json(changed=False, msg = "Failed to get task status for task %d Error code: %d Error msg: %s" % (task_id, ret["data"]["error_code"], ret["data"]["error"]))
 
 def create_container(module):
-    api_key = module.params['api_key'] or os.environ['KYUP_API_KEY']
     enc_key = module.params['enc_key'] or os.environ['KYUP_ENC_KEY']
 
     if enc_key is None:
@@ -196,7 +192,7 @@ def create_container(module):
 
     req = '{"action":"cloudCreate","authorization_key":"%s","data":{"name":"%s","password":"%s","image_name":"%s","datacenter_id":%d,"storage_type":"%s","resources":{"mem":%d,,"hdd":%d,,"cpu":%d,,"bw":%d}}}'
     req = req % (
-        api_key,
+        module.params.get('api_key'),
         opt['name'],
         encrypt(enc_key, opt['password']),
         opt['image'],
@@ -238,9 +234,9 @@ def core(module):
     api_key = module.params['api_key'] or os.environ['KYUP_API_KEY']
     if api_key is None:
         module.fail_json(changed=False, msg = "you can not continue without api_key")
+    module.params['api_key'] = api_key
 
     action = module.params['action']
-
     if action is None:
         module.fail_json(changed=False, msg = "action parameter is required by this module")
     elif action == 'create':
