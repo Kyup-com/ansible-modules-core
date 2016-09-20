@@ -225,12 +225,6 @@ def create_container(module):
         module.fail_json(changed=False, msg = "Error code: %d Error msg: %s" % (ret["data"]["error_code"], ret["data"]["error"]))
 
 def core(module):
-    def getkeyordie(k):
-        v = module.params[k]
-        if v is None:
-            module.fail_json(msg = 'Unable to load %s' % k)
-        return v
-
     api_key = module.params['api_key'] or os.environ['KYUP_API_KEY']
     if api_key is None:
         module.fail_json(changed=False, msg = "you can not continue without api_key")
