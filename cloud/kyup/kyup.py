@@ -17,7 +17,7 @@
 DOCUMENTATION = '''
 ---
 module: kyup
-short_description: create, terminate, start or stop a container at kyup.com, return container_id.
+short_description: create, terminate, start or stop a container in kyup.com, return container_id.
 description:
     - Creates or terminates Kyup container. When created optionally waits for it to be 'running'. This module has a dependency on python-json and python-requests.
 version_added: "2.2"
@@ -145,7 +145,7 @@ def kyup_action(module, container_id, action):
     ret = {}
     while count != 0:
         # get the response
-        resp = requests.post(url, { 'request': req % (action, module.params.get('api_key'), container_id) } )
+        resp = requests.post(url, { 'request': req % (action, module.params.get('api_key'), int(container_id)) } )
         # parse the json
         ret = json.loads(resp.text)
         # check if the status is OK
@@ -163,14 +163,17 @@ def get_task_status(module, task_id):
     count = 12; # 12 x 5sec = 60 seconds
     ret = {}
     while count != 0:
-        resp = requests.post(url, { 'request': req % (module.params.get('api_key'), task_id) } )
+        resp = requests.post(url, { 'request': req % (module.params.get('api_key'), int(task_id)) } )
         ret = json.loads(resp.text)
         # Check if the status is 1 and if we have received the data hash, then check if we have a task and its status is 1
-        if ret["status"] and ret["data"]["task"]["status"] == 1:
+        if ret["status"] and 'container_id' in ret["data"]["task"]:
             return ret["data"]["task"]["container_id"]
         time.sleep(5)
         count -= 1
-    module.fail_json(changed=False, msg = "Failed to get task status for task %d Error code: %d Error msg: %s" % (task_id, ret["data"]["error_code"], ret["data"]["error"]))
+    if 'data' in ret and 'error_code' in ret["data"]:
+        module.fail_json(changed=False, msg = "Failed to get task status for task %d Error code: %d Error msg: %s" % (task_id, ret["data"]["error_code"], ret["data"]["error"]))
+    else:
+        module.fail_json(changed=False, msg = ret)
 
 def create_container(module):
     enc_key = module.params['enc_key'] or os.environ['KYUP_ENC_KEY']
@@ -190,22 +193,21 @@ def create_container(module):
     elif storage_type == 'distributed':
         storage_type = 1
 
-    req = '{"action":"cloudCreate","authorization_key":"%s","data":{"name":"%s","password":"%s","image_name":"%s","datacenter_id":%d,"storage_type":"%s","resources":{"mem":%d,,"hdd":%d,,"cpu":%d,,"bw":%d}}}'
-    req = req % (
-        module.params.get('api_key'),
-        opt['name'],
-        encrypt(enc_key, opt['password']),
-        opt['image'],
-        opt['dc_id'],
-        storage_type,
-        module.params.get('mem'),
-        module.params.get('hdd'),
-        module.params.get('cpu_cores'),
-        module.params.get('bw')
-        )
-
     container_id = 0
-    resp = requests.post(url, { 'request': req })
+    req = '{"action":"cloudCreate","authorization_key":"%s","data":{"name":"%s","password":"%s","image_name":"%s","datacenter_id":%d,"storage_type":%d,"resources":{"mem":%d,"hdd":%d,"cpu":%d,"bw":%d}}}'
+    resp = requests.post(url, { 'request': req % (
+            module.params.get('api_key'),
+            opt['name'],
+            encrypt(enc_key, opt['password']),
+            opt['image'],
+            opt['dc_id'],
+            storage_type,
+            module.params.get('mem'),
+            module.params.get('hdd'),
+            module.params.get('cpu_cores'),
+            module.params.get('bw')
+            )
+        })
     ret = json.loads(resp.text)
     if ret["status"]:
         task = ret["data"]["task_id"]
