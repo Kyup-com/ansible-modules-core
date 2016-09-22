@@ -222,6 +222,13 @@ def create_container(module):
         if opt[i] is None:
             module.fail_json(changed=False, msg = '%s parameter is required for creating a container' % i)
 
+    # check if the container already exists
+    req = '{"action":"cloudList","authorization_key":"%s","data":{}}'
+    ret = api_request(module, req % module.params.get('api_key'))
+    for i in ret['data']['list']:
+        if i['name'] == module.params.get('name'):
+            module.exit_json(changed=False, msg = 'Container %s already exists' % module.params.get('name'))
+
     storage_type = module.params['storage_type']
     if storage_type is None or storage_type == 'local':
         storage_type = 0
