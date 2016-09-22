@@ -106,8 +106,6 @@ EXAMPLES = '''
     image=CentOS plain
 '''
 
-url='https://api.kyup.com/client/v1'
-
 import os
 import requests
 import time
@@ -122,6 +120,13 @@ except ImportError:
 
 # import module snippets
 from ansible.module_utils.basic import *
+
+## Defaults for the module
+# API URL
+url='https://api.kyup.com/client/v1'
+
+# Modify this counter if you want to wait for the requests, more then a minute
+retries=12 # 12 x 5sec = 60 seconds
 
 
 ## Code used for encryption of the passwords
@@ -139,41 +144,48 @@ def encrypt( key, data ):
     return base64.b64encode( cipher.encrypt( data ) )
 ## End of encryption code
 
-def kyup_action(module, container_id, action):
-    req = '{"action":"%s","authorization_key":"%s","data":{"container_id":%d}}'
-    count = 12; # 12 x 5sec = 60 seconds
+def api_request(module, data):
     ret = {}
+    count = retries;
     while count != 0:
         # get the response
-        resp = requests.post(url, { 'request': req % (action, module.params.get('api_key'), int(container_id)) } )
+        resp = requests.post(url, { "request": data })
         # parse the json
         ret = json.loads(resp.text)
-        # check if the status is OK
-        if ret["status"]:
-            if action == 'cloudDetails':
-                return ret["data"]["container"]
-            else:
-                module.exit_json(changed=True, msg = "%s successfull" % action)
-        time.sleep(5)
+        if ret['status']:
+            return ret
         count -= 1
-    module.fail_json(changed=False, msg = "Unable to %s container %d Error code: %d Error msg: %s" % (action, container_id, ret["data"]["error_code"], ret["data"]["error"]))
+        time.sleep(5)
+
+    if 'status' in ret:
+        if ret['status']:
+            return ret
+        else:
+            if 'data' in ret and 'error_code' in ret['data']:
+                module.fail_json(changed=False, msg = 'Failed to execute request. Error code: %d Error msg: %s req: %s' % (ret['data']['error_code'], ret['data']['error'], data))
+#                if ret['data']['error_code'] == 101:
+#                else:
+#                    module.fail_json(changed=False, msg = 'Failed to execute request. Error code: %d Error msg: %s' % (ret['data']['error_code'], ret['data']['error']))
+    else:
+        module.fail_json(changed=False, msg = 'Req: ' + data + ' Resp: ' + ret)
+
+def kyup_action(module, container_id, action):
+    req = '{"action":"%s","authorization_key":"%s","data":{"container_id":%d}}'
+    ret = api_request(module, req % (action, module.params.get('api_key'), int(container_id)) )
+    if action == 'cloudDetails':
+        return ret['data']['container']
+    else:
+        module.exit_json(changed=True, msg = '%s successfull' % action)
 
 def get_task_status(module, task_id):
     req = '{"action":"getTask","authorization_key":"%s","data":{"task_id":%d}}'
-    count = 12; # 12 x 5sec = 60 seconds
-    ret = {}
+    count = retries;
     while count != 0:
-        resp = requests.post(url, { 'request': req % (module.params.get('api_key'), int(task_id)) } )
-        ret = json.loads(resp.text)
-        # Check if the status is 1 and if we have received the data hash, then check if we have a task and its status is 1
-        if ret["status"] and 'container_id' in ret["data"]["task"]:
+        ret = api_request(module, req % (module.params.get('api_key'), int(task_id)) )
+        if 'container_id' in ret['data']['task']:
             return ret["data"]["task"]["container_id"]
-        time.sleep(5)
         count -= 1
-    if 'data' in ret and 'error_code' in ret["data"]:
-        module.fail_json(changed=False, msg = "Failed to get task status for task %d Error code: %d Error msg: %s" % (task_id, ret["data"]["error_code"], ret["data"]["error"]))
-    else:
-        module.fail_json(changed=False, msg = ret)
+    module.fail_json(changed=False, msg = ret)
 
 def create_container(module):
     enc_key = module.params['enc_key'] or os.environ['KYUP_ENC_KEY']
@@ -195,7 +207,7 @@ def create_container(module):
 
     container_id = 0
     req = '{"action":"cloudCreate","authorization_key":"%s","data":{"name":"%s","password":"%s","image_name":"%s","datacenter_id":%d,"storage_type":%d,"resources":{"mem":%d,"hdd":%d,"cpu":%d,"bw":%d}}}'
-    resp = requests.post(url, { 'request': req % (
+    ret = api_request(module, req % (
             module.params.get('api_key'),
             opt['name'],
             encrypt(enc_key, opt['password']),
@@ -207,12 +219,10 @@ def create_container(module):
             module.params.get('cpu_cores'),
             module.params.get('bw')
             )
-        })
-    ret = json.loads(resp.text)
-    if ret["status"]:
-        task = ret["data"]["task_id"]
-        if task is not None and task > 0:
-            container_id = get_task_status(module, task)
+        )
+    if 'task_id' in ret['data']:
+        if ret['data']['task_id'] > 0:
+            container_id = get_task_status(module, ret['data']['task_id'])
             container = kyup_action(module, container_id, "cloudDetails")
             module.exit_json(
                 changed = True,
@@ -222,9 +232,9 @@ def create_container(module):
                 msg = "Container: Name: %s IP: %s" % (container["name"], container["ip"])
             )
         else:
-            module.fail_json(changed=True, msg = "Unable to get task_id")
-    else:   
-        module.fail_json(changed=False, msg = "Error code: %d Error msg: %s" % (ret["data"]["error_code"], ret["data"]["error"]))
+            module.fail_json(changed=True, msg = 'Invalid task_id')
+    else:
+        module.fail_json(changed=True, msg = 'Unable to get task_id')
 
 def core(module):
     api_key = module.params['api_key'] or os.environ['KYUP_API_KEY']
