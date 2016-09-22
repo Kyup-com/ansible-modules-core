@@ -187,6 +187,29 @@ def get_task_status(module, task_id):
         count -= 1
     module.fail_json(changed=False, msg = ret)
 
+def add_ssh_keys(module, container_id):
+    key_list = {}
+    ssh_keys = module.params['ssh_keys']
+    if ssh_keys is None or ssh_keys == '':
+        return
+    # cleanup any spaces put by the user
+    ssh_keys.replace(' ', '')
+
+    for i in ssh_keys.split(','):
+        key_list[i] = 0
+    # get the key IDs
+    req = '{"action":"%s","authorization_key":"%s","data":{%s}}'
+    ret = api_request(module, req % ('sshGetKeys', module.params.get('api_key'), ''))
+    for key in ret['data']['keys']:
+        if key['title'] in key_list:
+            key_list[key['title']] = key['key_id']
+    # add the keys to the container
+    key_req = '"key_id":%d,"container_id":%d'
+    for key in key_list:
+        if key_list[key] == 0:
+            module.fail_json(changed=True, msg = "Unable to find key ID for key %s" % key)
+        api_request(module, req % ('sshInstallKey', module.params.get('api_key'), key_req % (int(key_list[key]), int(container_id) )))
+
 def create_container(module):
     enc_key = module.params['enc_key'] or os.environ['KYUP_ENC_KEY']
 
@@ -224,6 +247,7 @@ def create_container(module):
         if ret['data']['task_id'] > 0:
             container_id = get_task_status(module, ret['data']['task_id'])
             container = kyup_action(module, container_id, "cloudDetails")
+            add_ssh_keys(module, container_id)
             module.exit_json(
                 changed = True,
                 id = container_id,
