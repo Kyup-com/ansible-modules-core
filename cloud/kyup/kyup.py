@@ -93,7 +93,7 @@ options:
   storage_type:
     description:
       - Choose the storage type for this container.
-    choices: [ "local", "distributed" ]
+    choices: [ 'local', 'distributed' ]
     required: false
     default: local
 '''
@@ -149,7 +149,7 @@ def api_request(module, data):
     count = retries;
     while count != 0:
         # get the response
-        resp = requests.post(url, { "request": data })
+        resp = requests.post(url, { 'request': data })
         # parse the json
         ret = json.loads(resp.text)
         if ret['status']:
@@ -183,7 +183,7 @@ def get_task_status(module, task_id):
     while count != 0:
         ret = api_request(module, req % (module.params.get('api_key'), int(task_id)) )
         if 'container_id' in ret['data']['task']:
-            return ret["data"]["task"]["container_id"]
+            return ret['data']['task']['container_id']
         count -= 1
     module.fail_json(changed=False, msg = ret)
 
@@ -207,20 +207,20 @@ def add_ssh_keys(module, container_id):
     key_req = '"key_id":%d,"container_id":%d'
     for key in key_list:
         if key_list[key] == 0:
-            module.fail_json(changed=True, msg = "Unable to find key ID for key %s" % key)
+            module.fail_json(changed=True, msg = 'Unable to find key ID for key %s' % key)
         api_request(module, req % ('sshInstallKey', module.params.get('api_key'), key_req % (int(key_list[key]), int(container_id) )))
 
 def create_container(module):
     enc_key = module.params['enc_key'] or os.environ['KYUP_ENC_KEY']
 
     if enc_key is None:
-        module.fail_json(changed=False, msg = "ENC_KEY is required for creation of containers")
+        module.fail_json(changed=False, msg = 'ENC_KEY is required for creation of containers')
 
-    opt = { "name" : None, "password" : None, "image" : None, "dc_id" : None }
+    opt = { 'name' : None, 'password' : None, 'image' : None, 'dc_id' : None }
     for i in opt:
         opt[i] =  module.params.get(i)
         if opt[i] is None:
-            module.fail_json(changed=False, msg = "%s parameter is required for creating a container" % i)
+            module.fail_json(changed=False, msg = '%s parameter is required for creating a container' % i)
 
     storage_type = module.params['storage_type']
     if storage_type is None or storage_type == 'local':
@@ -246,14 +246,14 @@ def create_container(module):
     if 'task_id' in ret['data']:
         if ret['data']['task_id'] > 0:
             container_id = get_task_status(module, ret['data']['task_id'])
-            container = kyup_action(module, container_id, "cloudDetails")
+            container = kyup_action(module, container_id, 'cloudDetails')
             add_ssh_keys(module, container_id)
+            # remove the mask portion of the string
+            container['ip'] = container['ip'][0:-3]
             module.exit_json(
                 changed = True,
-                id = container_id,
-                ip = container["ip"],
-                name = container["name"],
-                msg = "Container: Name: %s IP: %s" % (container["name"], container["ip"])
+                ansible_facts = { 'container_name': container['name'], 'container_ip': container['ip'] },
+                msg = 'Container: Name: %s IP: %s' % (container['name'], container['ip'])
             )
         else:
             module.fail_json(changed=True, msg = 'Invalid task_id')
@@ -263,27 +263,27 @@ def create_container(module):
 def core(module):
     api_key = module.params['api_key'] or os.environ['KYUP_API_KEY']
     if api_key is None:
-        module.fail_json(changed=False, msg = "you can not continue without api_key")
+        module.fail_json(changed=False, msg = 'you can not continue without api_key')
     module.params['api_key'] = api_key
 
     action = module.params['action']
     if action is None:
-        module.fail_json(changed=False, msg = "action parameter is required by this module")
+        module.fail_json(changed=False, msg = 'action parameter is required by this module')
     elif action == 'create':
         create_container(module)
     else:
         container_id = module.params['container_id']
         if container_id is None:
-            module.fail_json(changed=False, msg = "container_id parameter is required for this action")
+            module.fail_json(changed=False, msg = 'container_id parameter is required for this action')
 
         if action == 'destroy':
-            kyup_action(module, container_id, "cloudDestroy")
+            kyup_action(module, container_id, 'cloudDestroy')
         elif action == 'start':
-            kyup_action(module, container_id, "cloudStart")
+            kyup_action(module, container_id, 'cloudStart')
         elif action == 'stop':
-            kyup_action(module, container_id, "cloudStop")
+            kyup_action(module, container_id, 'cloudStop')
         elif action == 'restart':
-            kyup_action(module, container_id, "cloudReboot")
+            kyup_action(module, container_id, 'cloudReboot')
     
 def main():
     module = AnsibleModule(
