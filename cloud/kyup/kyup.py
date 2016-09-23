@@ -95,10 +95,37 @@ options:
 
 EXAMPLES = '''
 # Basic provisioning example
-- kyup:
-    api_key=XXXX
-    ssh_keys=hackman,piele
-    image=CentOS plain
+---
+- hosts: kyup
+  tasks:
+  - name: ensure kyup container
+    kyup: >
+      api_key=XXXX
+      enc_key=YYYY
+      action=create
+      image="Centos Plain"
+      dc_id=1
+      name=avalon
+      password=e4a17265b28f6a9e8657
+      ssh_keys=hackman,piele
+  - add_host: name={{ container_ip }} group=containers
+
+- hosts: containers
+  tasks:
+  - name: copy the hosts file
+    copy: src=/etc/hosts dest=/etc/hosts
+
+
+# Rebooting a container
+---
+- hosts: kyup
+  tasks:
+  - name: restart the container
+    kyup: >
+      api_key=XXXX
+      action=restart
+      name=avalon
+
 '''
 
 import os
