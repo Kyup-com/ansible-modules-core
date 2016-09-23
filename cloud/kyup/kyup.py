@@ -45,11 +45,6 @@ options:
       - Comma separated list of ssh key names, that have access to this container.
     required: false
     default: null
-  container_id:
-    description:
-	  - ID of the container you want to operate on.
-    required: false
-    default: null
   password:
     description:
       - Password for the root user of the container.
@@ -162,14 +157,24 @@ def api_request(module, data):
             return ret
         else:
             if 'data' in ret and 'error_code' in ret['data']:
-                module.fail_json(changed=False, msg = 'Failed to execute request. Error code: %d Error msg: %s req: %s' % (ret['data']['error_code'], ret['data']['error'], data))
-#                if ret['data']['error_code'] == 101:
-#                else:
-#                    module.fail_json(changed=False, msg = 'Failed to execute request. Error code: %d Error msg: %s' % (ret['data']['error_code'], ret['data']['error']))
+                if ret['data']['error_code'] == 101:
+                    module.fail_json(changed=False, msg = 'Failed to execute request. Error code: %d Error msg: %s req: %s' % (ret['data']['error_code'], ret['data']['error'], data))
+                else:
+                    module.fail_json(changed=False, msg = 'Failed to execute request. Error code: %d Error msg: %s' % (ret['data']['error_code'], ret['data']['error']))
     else:
         module.fail_json(changed=False, msg = 'Req: ' + data + ' Resp: ' + ret)
 
-def kyup_action(module, container_id, action):
+def kyup_action(module, action, container_id = 0):
+    req = '{"action":"cloudList","authorization_key":"%s","data":{}}'
+    ret = api_request(module, req % module.params.get('api_key'))
+    for container in ret['data']['list']:
+        if container['name'] == module.params.get('name'):
+          container_id = container['id']
+          break
+
+    if container_id == 0:
+        module.exit_json(changed=False, msg = 'Could not find container id for container name %s' % module.params.get('name'))
+
     req = '{"action":"%s","authorization_key":"%s","data":{"container_id":%d}}'
     ret = api_request(module, req % (action, module.params.get('api_key'), int(container_id)) )
     if action == 'cloudDetails':
@@ -225,9 +230,14 @@ def create_container(module):
     # check if the container already exists
     req = '{"action":"cloudList","authorization_key":"%s","data":{}}'
     ret = api_request(module, req % module.params.get('api_key'))
-    for i in ret['data']['list']:
-        if i['name'] == module.params.get('name'):
-            module.exit_json(changed=False, msg = 'Container %s already exists' % module.params.get('name'))
+    for container in ret['data']['list']:
+        if container['name'] == module.params.get('name'):
+            container['ip'] = container['ip'][0:-3]
+            module.exit_json(
+                changed=False,
+                ansible_facts = { 'container_name': container['name'], 'container_ip': container['ip'] },
+                msg = 'Container %s already exists' % module.params.get('name')
+            )
 
     storage_type = module.params['storage_type']
     if storage_type is None or storage_type == 'local':
@@ -253,7 +263,7 @@ def create_container(module):
     if 'task_id' in ret['data']:
         if ret['data']['task_id'] > 0:
             container_id = get_task_status(module, ret['data']['task_id'])
-            container = kyup_action(module, container_id, 'cloudDetails')
+            container = kyup_action(module, 'cloudDetails', container_id)
             add_ssh_keys(module, container_id)
             # remove the mask portion of the string
             container['ip'] = container['ip'][0:-3]
@@ -279,18 +289,14 @@ def core(module):
     elif action == 'create':
         create_container(module)
     else:
-        container_id = module.params['container_id']
-        if container_id is None:
-            module.fail_json(changed=False, msg = 'container_id parameter is required for this action')
-
         if action == 'destroy':
-            kyup_action(module, container_id, 'cloudDestroy')
+            kyup_action(module, 'cloudDestroy')
         elif action == 'start':
-            kyup_action(module, container_id, 'cloudStart')
+            kyup_action(module, 'cloudStart')
         elif action == 'stop':
-            kyup_action(module, container_id, 'cloudStop')
+            kyup_action(module, 'cloudStop')
         elif action == 'restart':
-            kyup_action(module, container_id, 'cloudReboot')
+            kyup_action(module, 'cloudReboot')
     
 def main():
     module = AnsibleModule(
@@ -298,7 +304,6 @@ def main():
             api_key = dict(aliases=['API_KEY'], no_log=True),
             enc_key = dict(aliases=['ENC_KEY'], no_log=True),
             action = dict(type='str', aliases=['state', 'command', 'cmd']),
-            container_id = dict(type='int'),
             dc_id = dict(type='int', aliases=['datacenter', 'datacenter_id']),
             name = dict(type='str'),
             image = dict(type='str', aliases=['template']),
@@ -309,17 +314,6 @@ def main():
             bw = dict(type='int', default=2),
             ssh_keys = dict(default=''),
             storage_type = dict(default='local', choices=['local', 'distributed']),
-        ),
-        mutually_exclusive = (
-            ['container_id', 'name'],
-            ['container_id', 'dc_id'],
-            ['container_id', 'image'],
-            ['container_id', 'password'],
-            ['container_id', 'mem'],
-            ['container_id', 'hdd'],
-            ['container_id', 'cpu_cores'],
-            ['container_id', 'bw'],
-            ['container_id', 'storage_type'],
         ),
     )
     core(module)
