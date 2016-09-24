@@ -45,15 +45,15 @@ options:
     required: false
   password:
     description:
-      - Password for the root user of the container.
+      - Password for the root user of the container. Required when I(action) = 'create'.
     required: false
   image:
     description:
-      - Template image to use when creating the container.
+      - Template image to use when creating the container. Required when I(action) = 'create'.
     required: false
   dc_id:
     description:
-      - DataCenter location ID.
+      - DataCenter location ID. Required when I(action) = 'create'.
     required: false
     default: 1
   mem:
