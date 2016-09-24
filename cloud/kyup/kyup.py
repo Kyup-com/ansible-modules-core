@@ -25,16 +25,16 @@ author: Marian Marinov <mm@kyup.com>
 options:
   api_key:
     description:
-	  - Kyup.com API key. The key can also be supplied by setting the Environment variable KYUP_API_KEY.
-	required: true
+      - Kyup.com API key. The key can also be supplied by setting the Environment variable KYUP_API_KEY.
+    required: true
   enc_key:
     description:
       - Kyup.com encryption key. The key can also be supplied by setting the Environment variable KYUP_ENC_KEY.
     required: false
   action:
     description:
-	  - Action you want to perform on the container.
-	required: true
+      - Action you want to perform on the container.
+    required: true
   name:
     description:
       - Name of the container that you will create/operate on
