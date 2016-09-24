@@ -34,14 +34,11 @@ options:
   action:
     description:
 	  - Action you want to perform on the container.
-	choices: [ 'create', 'destroy', 'start', 'stop', 'restart' ]
 	required: true
-	aliases: [ 'state', 'command', 'cmd' ]
   name:
     description:
       - Name of the container that you will create/operate on
     required: true
-    aliases: [ 'container' ]
   ssh_keys:
     description:
       - Comma separated list of ssh key names, that have access to this container.
@@ -50,23 +47,20 @@ options:
     description:
       - Password for the root user of the container.
     required: false
-    aliases: [ 'pass' ]
   image:
     description:
       - Template image to use when creating the container.
     required: false
-    aliases: [ 'template' ]
   dc_id:
     description:
       - DataCenter location ID.
     required: false
-    aliases: [ 'datacenter', 'datacenter_id' ]
+    default: 1
   mem:
     description:
       - Memory of the container in GB. Minimum 1 GB.
     required: false
     default: 1
-    aliases: [ 'ram' ]
   hdd:
     description:
       - Storage size in GB. Minimum 20 GB.
@@ -77,7 +71,6 @@ options:
       - Number of CPU cores to be used. Minimum 2 CPU cores.
     required: false
     default: 2
-    aliases: [ 'cpus' ]
   bw:
     description:
       - Bandwidth limit for this container, in TB. Minimum 2 TB.
@@ -86,7 +79,6 @@ options:
   storage_type:
     description:
       - Choose the storage type for this container.
-    choices: [ 'local', 'distributed' ]
     required: false
     default: local
 '''
@@ -329,7 +321,7 @@ def main():
             api_key = dict(aliases=['API_KEY'], no_log=True),
             enc_key = dict(aliases=['ENC_KEY'], no_log=True),
             action = dict(type='str', aliases=['state', 'command', 'cmd']),
-            dc_id = dict(type='int', aliases=['datacenter', 'datacenter_id']),
+            dc_id = dict(type='int', aliases=['datacenter', 'datacenter_id'], default=1),
             name = dict(type='str'),
             image = dict(type='str', aliases=['template']),
             password = dict(type='str', aliases=['pass'], no_log=True),
