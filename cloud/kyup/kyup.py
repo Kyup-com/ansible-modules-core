@@ -27,41 +27,39 @@ options:
     description:
 	  - Kyup.com API key. The key can also be supplied by setting the Environment variable KYUP_API_KEY.
 	required: true
-	default: null
   enc_key:
     description:
       - Kyup.com encryption key. The key can also be supplied by setting the Environment variable KYUP_ENC_KEY.
     required: false
-    default: null
   action:
     description:
 	  - Action you want to perform on the container.
 	choices: [ 'create', 'destroy', 'start', 'stop', 'restart' ]
 	required: true
-	default: null
-	aliases: [ state, command, cmd ]
+	aliases: [ 'state', 'command', 'cmd' ]
+  name:
+    description:
+      - Name of the container that you will create/operate on
+    required: true
+    aliases: [ 'container' ]
   ssh_keys:
     description:
       - Comma separated list of ssh key names, that have access to this container.
     required: false
-    default: null
   password:
     description:
       - Password for the root user of the container.
     required: false
-    default: null
     aliases: [ 'pass' ]
   image:
     description:
       - Template image to use when creating the container.
     required: false
-    default: null
     aliases: [ 'template' ]
   dc_id:
     description:
       - DataCenter location ID.
     required: false
-    default: null
     aliases: [ 'datacenter', 'datacenter_id' ]
   mem:
     description:
