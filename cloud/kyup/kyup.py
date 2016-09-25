@@ -295,8 +295,10 @@ def create_container(module):
         module.fail_json(changed=True, msg = 'Unable to get task_id')
 
 def core(module):
-    api_key = module.params['api_key'] or os.environ['KYUP_API_KEY']
-    if api_key is None:
+    api_key = module.params['api_key']
+    if 'KYUP_API_KEY' in os.environ:
+        api_key = os.environ['KYUP_API_KEY']
+    if api_key is None or api_key == '':
         module.fail_json(changed=False, msg = 'you can not continue without api_key')
     module.params['api_key'] = api_key
 
