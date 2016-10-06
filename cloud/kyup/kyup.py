@@ -234,7 +234,7 @@ def add_ssh_keys(module, container_id):
         api_request(module, req % ('sshInstallKey', module.params.get('api_key'), key_req % (int(key_list[key]), int(container_id) )))
 
 def create_container(module):
-    enc_key = module.params['enc_key'] or os.environ['KYUP_ENC_KEY']
+    enc_key = module.params['enc_key'] or os.environ.get('KYUP_ENC_KEY', None)
 
     if enc_key is None:
         module.fail_json(changed=False, msg = 'ENC_KEY is required for creation of containers')
