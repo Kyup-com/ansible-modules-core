@@ -253,7 +253,7 @@ def create_container(module):
             container['ip'] = container['ip'][0:-3]
             module.exit_json(
                 changed=False,
-                ansible_facts = { 'container_name': container['name'], 'container_ip': container['ip'] },
+                ansible_facts = { 'kyup_container_name': container['name'], 'kyup_container_ip': container['ip'] },
                 msg = 'Container %s already exists' % module.params.get('name')
             )
 
@@ -287,7 +287,7 @@ def create_container(module):
             container['ip'] = container['ip'][0:-3]
             module.exit_json(
                 changed = True,
-                ansible_facts = { 'container_name': container['name'], 'container_ip': container['ip'] },
+                ansible_facts = { 'kyup_container_name': container['name'], 'kyup_container_ip': container['ip'] },
                 msg = 'Container: Name: %s IP: %s' % (container['name'], container['ip'])
             )
         else:
