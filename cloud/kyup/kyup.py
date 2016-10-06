@@ -324,7 +324,7 @@ def main():
             api_key = dict(aliases=['API_KEY'], no_log=True),
             enc_key = dict(aliases=['ENC_KEY'], no_log=True),
             action = dict(type='str', aliases=['state', 'command', 'cmd']),
-            dc_id = dict(type='int', aliases=['datacenter', 'datacenter_id'], default=1),
+            dc_id = dict(type='int', aliases=['datacenter', 'datacenter_id', 'dc_id', 'dc'], default=1),
             name = dict(type='str'),
             image = dict(type='str', aliases=['template']),
             password = dict(type='str', aliases=['pass'], no_log=True),
