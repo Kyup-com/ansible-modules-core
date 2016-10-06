@@ -119,19 +119,14 @@ EXAMPLES = '''
 '''
 
 import os
-import requests
 import time
 import base64
 import md5
 from Crypto.Cipher import AES
 
-try:
-    import json
-except ImportError:
-    import simplejson as json
-
 # import module snippets
 from ansible.module_utils.basic import *
+from ansible.module_utils.urls import *
 
 ## Defaults for the module
 # API URL
@@ -158,16 +153,22 @@ def encrypt( key, data ):
 
 def api_request(module, data):
     ret = {}
+    status = 0
+    params = 'request=' + data
     count = retries;
     while count != 0:
         # get the response
-        resp = requests.post(url, { 'request': data })
+        resp, info = fetch_url(module, url, params)
         # parse the json
-        ret = json.loads(resp.text)
+        ret = module.from_json(resp.read())
         if ret['status']:
             return ret
+        status = info['status']
         count -= 1
         time.sleep(5)
+
+    if status != 200:
+        module.fail_json(changed=False, msg = 'Request failed with status %d' % int(status))
 
     if 'status' in ret:
         if ret['status']:
