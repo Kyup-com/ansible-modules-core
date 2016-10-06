@@ -161,7 +161,8 @@ def api_request(module, data):
         resp, info = fetch_url(module, url, params)
         # parse the json
         ret = module.from_json(resp.read())
-        if ret['status']:
+        status = ret.get('status', False)
+        if status:
             return ret
         http_status = info['status']
         count -= 1
@@ -170,17 +171,20 @@ def api_request(module, data):
     if http_status != 200:
         module.fail_json(changed=False, msg = 'Request failed with status %d' % int(status))
 
-    if 'status' in ret:
-        if ret['status']:
-            return ret
-        else:
-            if 'data' in ret and 'error_code' in ret['data']:
-                if ret['data']['error_code'] == 101:
-                    module.fail_json(changed=False, msg = 'Failed to execute request. Error code: %d Error msg: %s req: %s' % (ret['data']['error_code'], ret['data']['error'], data))
-                else:
-                    module.fail_json(changed=False, msg = 'Failed to execute request. Error code: %d Error msg: %s' % (ret['data']['error_code'], ret['data']['error']))
-    else:
+    status = ret.get('status', False)
+    # Exit if we did not found status
+    if not status:
         module.fail_json(changed=False, msg = 'Req: ' + data + ' Resp: ' + ret)
+
+    # We have found status, check its value here
+    if status:
+        return ret
+    else:
+        if 'data' in ret and 'error_code' in ret['data']:
+            if ret['data']['error_code'] == 101:
+                module.fail_json(changed=False, msg = 'Failed to execute request. Error code: %d Error msg: %s req: %s' % (ret['data']['error_code'], ret['data']['error'], data))
+            else:
+                module.fail_json(changed=False, msg = 'Failed to execute request. Error code: %d Error msg: %s' % (ret['data']['error_code'], ret['data']['error']))
 
 def kyup_action(module, action, container_id = 0):
     req = '{"action":"cloudList","authorization_key":"%s","data":{}}'
