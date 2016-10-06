@@ -153,7 +153,7 @@ def encrypt( key, data ):
 
 def api_request(module, data):
     ret = {}
-    status = 0
+    http_status = 0
     params = 'request=' + data
     count = retries
     while count:
@@ -163,11 +163,11 @@ def api_request(module, data):
         ret = module.from_json(resp.read())
         if ret['status']:
             return ret
-        status = info['status']
+        http_status = info['status']
         count -= 1
         time.sleep(5)
 
-    if status != 200:
+    if http_status != 200:
         module.fail_json(changed=False, msg = 'Request failed with status %d' % int(status))
 
     if 'status' in ret:
