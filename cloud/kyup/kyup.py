@@ -155,8 +155,8 @@ def api_request(module, data):
     ret = {}
     status = 0
     params = 'request=' + data
-    count = retries;
-    while count != 0:
+    count = retries
+    while count:
         # get the response
         resp, info = fetch_url(module, url, params)
         # parse the json
@@ -202,8 +202,8 @@ def kyup_action(module, action, container_id = 0):
 
 def get_task_status(module, task_id):
     req = '{"action":"getTask","authorization_key":"%s","data":{"task_id":%d}}'
-    count = retries;
-    while count != 0:
+    count = retries
+    while count:
         ret = api_request(module, req % (module.params.get('api_key'), int(task_id)) )
         if 'container_id' in ret['data']['task']:
             return ret['data']['task']['container_id']
