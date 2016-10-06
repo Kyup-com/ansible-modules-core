@@ -297,11 +297,12 @@ def create_container(module):
 
 def core(module):
     api_key = module.params['api_key']
-    if 'KYUP_API_KEY' in os.environ:
+    if os.environ.get('KYUP_API_KEY', None):
         api_key = os.environ['KYUP_API_KEY']
+        module.params['api_key'] = api_key
+
     if api_key is None or api_key == '':
         module.fail_json(changed=False, msg = 'you can not continue without api_key')
-    module.params['api_key'] = api_key
 
     action = module.params['action']
     if action is None:
