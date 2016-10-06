@@ -20,7 +20,7 @@ module: kyup
 short_description: create, terminate, start or stop a container in kyup.com, return container_id.
 description:
     - Creates or terminates Kyup container. When created optionally waits for it to be 'running'. This module has a dependency on python-json and python-requests.
-version_added: "2.2"
+version_added: "2.3"
 author: Marian Marinov <mm@kyup.com>
 options:
   api_key:
