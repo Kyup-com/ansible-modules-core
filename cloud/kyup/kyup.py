@@ -118,6 +118,17 @@ EXAMPLES = '''
 
 '''
 
+RETURN = '''
+kyup_container_name:
+    returned: success
+    type: string
+    sample: "container_test"
+kyup_container_ip:
+    returned: success
+    type: string
+    sample: "10.12.131.5"
+'''
+
 import os
 import time
 import base64
