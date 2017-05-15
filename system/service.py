@@ -28,7 +28,7 @@ version_added: "0.1"
 short_description:  Manage services.
 description:
     - Controls services on remote hosts. Supported init systems include BSD init,
-      OpenRC, SysV, Solaris SMF, systemd, upstart.
+      OpenRC, SysV, Solaris SMF, systemd, upstart, perp.
 options:
     name:
         required: true
@@ -390,7 +390,7 @@ class LinuxService(Service):
     def get_service_tools(self):
 
         paths = [ '/sbin', '/usr/sbin', '/bin', '/usr/bin' ]
-        binaries = [ 'service', 'chkconfig', 'update-rc.d', 'rc-service', 'rc-update', 'initctl', 'systemctl', 'start', 'stop', 'restart', 'insserv' ]
+        binaries = [ 'service', 'chkconfig', 'update-rc.d', 'rc-service', 'rc-update', 'initctl', 'systemctl', 'start', 'stop', 'restart', 'insserv', 'perpctl', 'perpls' ]
         initpaths = [ '/etc/init.d' ]
         location = dict()
 
@@ -458,6 +458,13 @@ class LinuxService(Service):
             self.enable_cmd = location['rc-update']
             return # already have service start/stop tool too!
 
+        elif location.get('perpctl', False) and os.path.exists("/etc/perp/%s" % self.name):
+            # service is managed by perp
+            self.enable_cmd = location['perpctl']
+            self.svc_cmd = location['perpctl']
+            self.pls_cmd = location['perpls']
+            self.__perp_svc = self.name
+
         elif self.svc_initscript:
             # service is managed by with SysV init scripts
             if location.get('update-rc.d', False):
@@ -502,6 +509,50 @@ class LinuxService(Service):
             return sysv_is_enabled(service_name)
         else:
             return False
+
+    def get_perp_service_enabled(self):
+        def sysv_exists(name):
+            script = '/etc/init.d/' + name
+            return os.access(script, os.X_OK)
+
+        def sysv_is_enabled(name):
+            return bool(glob.glob('/etc/rc?.d/S??' + name))
+
+        service_name = self.__perp_svc
+
+        if sysv_exists(service_name):
+            return sysv_is_enabled(service_name)
+
+        return self.get_perp_status()
+
+    def get_perp_status(self):
+        (rc, out, err) = self.execute_command("%s %s" % (self.pls_cmd, self.__perp_svc))
+        if rc != 0:
+            self.module.fail_json(msg='failure %d running %s for %r: %s' % (rc, self.pls_cmd, self.__perp_svc, err))
+        elif 'failure stat() on service directory' in out:
+            self.module.fail_json(msg='perp could not find the requested service "%r": %s' % (self.__perp_svc, err))
+
+        # [E --- ---]  failed-service       error: failure stat() on service directory [ENOENT]
+        # [+ +++ +++]  running-service      uptime: 2822480s/2822480s  pids: 3655/3654
+        # [- --- ---]  stopped-service      (service not activated)
+        self.running = False
+        self.crashed = False
+
+        match = re.search("^\[(.*)\]\s+([0-9a-zA-Z\-\_]+)\s+(.*)", out)
+
+        if match is None:
+            return self.running
+
+        if match.group(1).startswith('+'):
+            self.running = True
+            self.crashed = False
+        elif match.group(1).startswith('-'):
+            self.running = False
+            self.crashed = False
+        elif match.group(1).startswith('E') or match.group(1).startswith('!'):
+            self.running = False
+            self.crashed = True
+        return self.running
 
     def get_systemd_status_dict(self):
 
@@ -564,6 +615,9 @@ class LinuxService(Service):
     def get_service_status(self):
         if self.svc_cmd and self.svc_cmd.endswith('systemctl'):
             return self.get_systemd_service_status()
+
+        if self.svc_cmd and self.svc_cmd.endswith('perpctl'):
+            return self.get_perp_status()
 
         self.action = "status"
         rc, status_stdout, status_stderr = self.service_control()
@@ -735,6 +789,26 @@ class LinuxService(Service):
                 return
 
         #
+        # perp's perpctl
+        #
+        if self.enable_cmd.endswith("perpctl"):
+            if (self.enable and self.state == "stopped") or (not self.enable and self.state == "started"):
+                self.module.fail_json(msg="Perp service cannot be enabled: %s and state: %s at the same time." % (self.enable, self.state))
+
+            if self.enable:
+                action = 'A'
+            else:
+                action = 'X'
+
+            # Check if we're already in the correct state
+            service_enabled = self.get_perp_service_enabled()
+
+            # self.changed should already be true
+            if self.enable == service_enabled:
+                self.changed = False
+                return
+
+        #
         # OpenRC's rc-update
         #
         if self.enable_cmd.endswith("rc-update"):
@@ -851,6 +925,8 @@ class LinuxService(Service):
             args = (self.enable_cmd, action, self.name + " " + self.runlevel)
         elif self.enable_cmd.endswith("systemctl"):
             args = (self.enable_cmd, action, self.__systemd_unit)
+        elif self.enable_cmd.endswith("perpctl"):
+            args = (self.enable_cmd, action, self.__perp_svc)
         else:
             args = (self.enable_cmd, self.name, action)
 
@@ -873,13 +949,17 @@ class LinuxService(Service):
         svc_cmd = ''
         arguments = self.arguments
         if self.svc_cmd:
-            if not self.svc_cmd.endswith("systemctl"):
+            if not self.svc_cmd.endswith("systemctl") and not self.svc_cmd.endswith("perpctl"):
                 # SysV and OpenRC take the form <cmd> <name> <action>
                 svc_cmd = "%s %s" % (self.svc_cmd, self.name)
-            else:
+            elif self.svc_cmd.endswith("systemctl"):
                 # systemd commands take the form <cmd> <action> <name>
                 svc_cmd = self.svc_cmd
                 arguments = "%s %s" % (self.__systemd_unit, arguments)
+            elif self.svc_cmd.endswith("perpctl"):
+                # perp commands take form <cmd> <flag> <name>
+                svc_cmd = self.svc_cmd
+                arguments = "%s %s" % (self.__perp_svc, arguments)
         elif self.svc_cmd is None and self.svc_initscript:
             # upstart
             svc_cmd = "%s" % self.svc_initscript
@@ -891,8 +971,18 @@ class LinuxService(Service):
 
         if self.action != "restart":
             if svc_cmd != '':
-                # upstart or systemd or OpenRC
-                rc_state, stdout, stderr = self.execute_command("%s %s %s" % (svc_cmd, self.action, arguments), daemonize=True)
+                if svc_cmd.endswith("perpctl"):
+                    if self.action == "start":
+                        flag = 'A'
+                    elif self.action == "stop":
+                        flag = 'X'
+                    elif self.action == "reload":
+                        flag = 'h'
+                    # perp
+                    rc_state, stdout, stderr = self.execute_command("%s %s %s" % (svc_cmd, flag, arguments), daemonize=True)
+                else:
+                    # upstart or systemd or OpenRC
+                    rc_state, stdout, stderr = self.execute_command("%s %s %s" % (svc_cmd, self.action, arguments), daemonize=True)
             else:
                 # SysV
                 rc_state, stdout, stderr = self.execute_command("%s %s %s" % (self.action, self.name, arguments), daemonize=True)
@@ -902,8 +992,11 @@ class LinuxService(Service):
         else:
             # In other systems, not all services support restart. Do it the hard way.
             if svc_cmd != '':
-                # upstart or systemd
-                rc1, stdout1, stderr1 = self.execute_command("%s %s %s" % (svc_cmd, 'stop', arguments), daemonize=True)
+                if svc_cmd.endswith("perpctl"):
+                    rc1, stdout1, stderr1 = self.execute_command("%s %s %s" % (svc_cmd, 'X', arguments), daemonize=True)
+                else:
+                    # upstart or systemd
+                    rc1, stdout1, stderr1 = self.execute_command("%s %s %s" % (svc_cmd, 'stop', arguments), daemonize=True)
             else:
                 # SysV
                 rc1, stdout1, stderr1 = self.execute_command("%s %s %s" % ('stop', self.name, arguments), daemonize=True)
@@ -912,8 +1005,11 @@ class LinuxService(Service):
                 time.sleep(self.sleep)
 
             if svc_cmd != '':
-                # upstart or systemd
-                rc2, stdout2, stderr2 = self.execute_command("%s %s %s" % (svc_cmd, 'start', arguments), daemonize=True)
+                if svc_cmd.endswith("perpctl"):
+                    rc2, stdout2, stderr2 = self.execute_command("%s %s %s" % (svc_cmd, 'A', arguments), daemonize=True)
+                else:
+                    # upstart or systemd
+                    rc2, stdout2, stderr2 = self.execute_command("%s %s %s" % (svc_cmd, 'start', arguments), daemonize=True)
             else:
                 # SysV
                 rc2, stdout2, stderr2 = self.execute_command("%s %s %s" % ('start', self.name, arguments), daemonize=True)
